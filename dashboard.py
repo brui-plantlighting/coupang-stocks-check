@@ -116,8 +116,26 @@ else:
     if prod_sales.empty:
         st.info("선택한 상품의 판매 데이터가 없습니다.")
     else:
+        date_min = prod_sales["날짜"].min().date()
+        date_max = prod_sales["날짜"].max().date()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("시작일", value=date_min, min_value=date_min, max_value=date_max)
+        with col2:
+            end_date = st.date_input("종료일", value=date_max, min_value=date_min, max_value=date_max)
+
+        if start_date > end_date:
+            st.error("시작일이 종료일보다 늦을 수 없어요.")
+            st.stop()
+
+        filtered = prod_sales[
+            (prod_sales["날짜"].dt.date >= start_date) &
+            (prod_sales["날짜"].dt.date <= end_date)
+        ]
+
         fig2 = px.bar(
-            prod_sales,
+            filtered,
             x="날짜",
             y="추정판매수량",
             color="옵션",
@@ -126,5 +144,6 @@ else:
         fig2.update_layout(yaxis_title="판매량 (개)", xaxis_title="")
         st.plotly_chart(fig2, use_container_width=True)
 
-        total = prod_sales["추정판매수량"].sum()
-        st.metric("누적 추정 판매", f"{total:,}개")
+        total = filtered["추정판매수량"].sum()
+        days = (end_date - start_date).days + 1
+        st.metric("기간 합계", f"{total:,}개", help=f"{start_date} ~ {end_date} ({days}일)")
