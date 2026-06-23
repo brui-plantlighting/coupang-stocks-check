@@ -85,11 +85,11 @@ st.subheader("현재 재고")
 latest = (
     df.sort_values("수집시각")
     .groupby(["상품ID", "옵션"], as_index=False)
-    .last()[["상품명", "옵션", "재고량", "수집시각"]]
+    .last()[["상품ID", "상품명", "옵션", "재고량", "수집시각"]]
     .sort_values(["상품명", "옵션"])
     .reset_index(drop=True)
 )
-latest_display = latest.copy()
+latest_display = latest[["상품명", "옵션", "재고량", "수집시각"]].copy()
 latest_display["수집시각"] = latest_display["수집시각"].dt.strftime("%Y-%m-%d %H:%M")
 
 st.dataframe(
