@@ -1,0 +1,6 @@
+playwright
+gspread
+google-auth
+streamlit
+pandas
+plotly

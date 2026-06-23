@@ -1,0 +1,6 @@
+credentials.json
+chrome_profile/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+*.bat
