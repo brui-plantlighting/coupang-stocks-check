@@ -162,14 +162,13 @@ with st.expander("입고 예정 목록", expanded=True):
         if prod_plan.empty:
             st.caption("이 상품의 입고 예정이 없습니다.")
         else:
-            edit_df = prod_plan[["입력시각", "입고예정일", "옵션", "입고수량", "메모"]].copy()
+            edit_df = prod_plan[["입력시각", "입고예정일", "입고수량", "메모"]].copy()
             edit_df["입고예정일"] = edit_df["입고예정일"].dt.date
 
             edited = st.data_editor(
                 edit_df,
                 column_config={
                     "입력시각": st.column_config.Column("입력시각", disabled=True),
-                    "옵션":     st.column_config.Column("옵션", disabled=True),
                     "메모":     st.column_config.Column("메모", disabled=True),
                     "입고예정일": st.column_config.DateColumn("입고 예정일"),
                     "입고수량":  st.column_config.NumberColumn("입고 수량", format="%d개", min_value=1),
@@ -213,8 +212,6 @@ with st.expander("입고 예정 목록", expanded=True):
 # ── 입고 예정 입력 ────────────────────────────────────────────
 with st.expander("입고 예정 입력"):
     with st.form("restock_form", clear_on_submit=True):
-        opts = ["(전체)"] + [o for o in prod_df["옵션"].unique() if o]
-        sel_opt = st.selectbox("옵션", opts)
         plan_date = st.date_input("입고 예정일", value=date.today() + timedelta(days=7))
         qty = st.number_input("입고 수량", min_value=1, step=1, value=100)
         memo = st.text_input("메모 (선택)")
@@ -227,7 +224,7 @@ with st.expander("입고 예정 입력"):
             datetime.now().isoformat(timespec="seconds"),
             str(selected_id),
             selected,
-            "" if sel_opt == "(전체)" else sel_opt,
+            "",
             plan_date.isoformat(),
             int(qty),
             memo,
