@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -11,9 +12,8 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 @st.cache_resource
 def _sheet():
-    creds = Credentials.from_service_account_info(
-        st.secrets["GOOGLE_CREDS"], scopes=SCOPES
-    )
+    creds_info = json.loads(st.secrets["GOOGLE_CREDS"])
+    creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     gc = gspread.authorize(creds)
     return gc.open_by_key(config.SHEET_ID)
 
