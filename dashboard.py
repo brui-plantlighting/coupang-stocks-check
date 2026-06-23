@@ -127,6 +127,25 @@ plan_df = load_restock_plan()
 st.subheader(f"재고 추이 — {selected}")
 
 if not prod_df.empty:
+    date_min = prod_df["수집시각"].min().date()
+    date_max = prod_df["수집시각"].max().date()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        stock_start = st.date_input("시작일", value=date_min, min_value=date_min, max_value=date_max, key="stock_start")
+    with col2:
+        stock_end = st.date_input("종료일", value=date_max, min_value=date_min, max_value=date_max, key="stock_end")
+
+    if stock_start > stock_end:
+        st.error("시작일이 종료일보다 늦을 수 없어요.")
+        st.stop()
+
+    prod_df = prod_df[
+        (prod_df["수집시각"].dt.date >= stock_start) &
+        (prod_df["수집시각"].dt.date <= stock_end)
+    ]
+
+if not prod_df.empty:
     options = prod_df["옵션"].unique()
     fig = go.Figure()
 
