@@ -73,6 +73,7 @@ def load_restock_plan() -> pd.DataFrame:
         ws = _ws(config.TAB_RESTOCK_PLAN, H_PLAN)
         df = pd.DataFrame(ws.get_all_records())
         if not df.empty:
+            df["상품ID"] = df["상품ID"].astype(str)
             df["입고예정일"] = pd.to_datetime(df["입고예정일"], errors="coerce")
         return df
     except Exception:
@@ -91,6 +92,7 @@ if df.empty:
 
 df["수집시각"] = pd.to_datetime(df["수집시각"], errors="coerce")
 df["재고량"] = pd.to_numeric(df["재고량"], errors="coerce").fillna(0).astype(int)
+df["상품ID"] = df["상품ID"].astype(str)
 
 # ── 현재 재고 테이블 ──────────────────────────────────────────
 st.subheader("현재 재고")
