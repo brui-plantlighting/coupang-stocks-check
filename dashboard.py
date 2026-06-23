@@ -94,25 +94,24 @@ df["재고량"] = pd.to_numeric(df["재고량"], errors="coerce").fillna(0).asty
 df["상품ID"] = df["상품ID"].astype(str)
 
 # ── 현재 재고 테이블 ──────────────────────────────────────────
-st.subheader("현재 재고")
+with st.expander("현재 재고 (원본 데이터)", expanded=False):
+    latest = (
+        df.sort_values("수집시각")
+        .groupby(["상품ID", "옵션"], as_index=False)
+        .last()[["상품ID", "상품명", "옵션", "재고량", "수집시각"]]
+        .sort_values(["상품명", "옵션"])
+        .reset_index(drop=True)
+    )
+    latest_display = latest[["상품명", "옵션", "재고량", "수집시각"]].copy()
+    latest_display["수집시각"] = latest_display["수집시각"].dt.strftime("%Y-%m-%d %H:%M")
 
-latest = (
-    df.sort_values("수집시각")
-    .groupby(["상품ID", "옵션"], as_index=False)
-    .last()[["상품ID", "상품명", "옵션", "재고량", "수집시각"]]
-    .sort_values(["상품명", "옵션"])
-    .reset_index(drop=True)
-)
-latest_display = latest[["상품명", "옵션", "재고량", "수집시각"]].copy()
-latest_display["수집시각"] = latest_display["수집시각"].dt.strftime("%Y-%m-%d %H:%M")
-
-st.dataframe(
-    latest_display,
-    use_container_width=True,
-    hide_index=True,
-    column_config={"재고량": st.column_config.NumberColumn("재고량", format="%d개")},
-)
-st.caption(f"마지막 수집: {df['수집시각'].max().strftime('%Y-%m-%d %H:%M')}")
+    st.dataframe(
+        latest_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config={"재고량": st.column_config.NumberColumn("재고량", format="%d개")},
+    )
+    st.caption(f"마지막 수집: {df['수집시각'].max().strftime('%Y-%m-%d %H:%M')}")
 
 st.divider()
 
