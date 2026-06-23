@@ -184,7 +184,7 @@ with st.expander("입고 예정 입력"):
         ws = _ws_write(config.TAB_RESTOCK_PLAN, H_PLAN)
         ws.append_row([
             datetime.now().isoformat(timespec="seconds"),
-            selected_id,
+            str(selected_id),
             selected,
             "" if sel_opt == "(전체)" else sel_opt,
             plan_date.isoformat(),
