@@ -31,6 +31,19 @@ def _ws(tab, headers):
         return ws
 
 
+def _ws_write(tab, headers):
+    """쓰기 전용 — 매번 새 연결로 최신 시트 목록 사용."""
+    creds_info = json.loads(st.secrets["GOOGLE_CREDS"])
+    creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    sh = gspread.authorize(creds).open_by_key(config.SHEET_ID)
+    try:
+        return sh.worksheet(tab)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=tab, rows=2000, cols=20)
+        ws.append_row(headers, value_input_option="USER_ENTERED")
+        return ws
+
+
 @st.cache_data(ttl=300)
 def load_stock() -> pd.DataFrame:
     sh = _sheet()
@@ -168,7 +181,7 @@ with st.expander("입고 예정 입력"):
 
     if submitted:
         from datetime import datetime
-        ws = _ws(config.TAB_RESTOCK_PLAN, H_PLAN)
+        ws = _ws_write(config.TAB_RESTOCK_PLAN, H_PLAN)
         ws.append_row([
             datetime.now().isoformat(timespec="seconds"),
             selected_id,
