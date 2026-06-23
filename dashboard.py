@@ -169,6 +169,23 @@ if not prod_df.empty:
     fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션")
     st.plotly_chart(fig, use_container_width=True)
 
+# ── 입고 예정 목록 ────────────────────────────────────────────
+with st.expander("입고 예정 목록", expanded=True):
+    if plan_df.empty:
+        st.caption("등록된 입고 예정이 없습니다.")
+    else:
+        prod_plan = plan_df[plan_df["상품ID"] == str(selected_id)].copy()
+        if prod_plan.empty:
+            st.caption("이 상품의 입고 예정이 없습니다.")
+        else:
+            prod_plan["입고예정일"] = prod_plan["입고예정일"].dt.strftime("%Y-%m-%d")
+            st.dataframe(
+                prod_plan[["입고예정일", "옵션", "입고수량", "메모", "입력시각"]],
+                use_container_width=True,
+                hide_index=True,
+                column_config={"입고수량": st.column_config.NumberColumn("입고수량", format="%d개")},
+            )
+
 # ── 입고 예정 입력 ────────────────────────────────────────────
 with st.expander("입고 예정 입력"):
     with st.form("restock_form", clear_on_submit=True):
