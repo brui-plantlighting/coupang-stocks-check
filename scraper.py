@@ -6,6 +6,8 @@
 # goalType=SALES URL 로 바로 들어가므로 '매출성장/다음' 같은 마법사 진행 버튼은 누를 일이 없음.
 # 누르는 건 오직 '상품 목록 페이지네이션(1 2 3 ... 다음)' 뿐 → 광고가 만들어질 일 없음.
 
+import time
+
 from playwright.sync_api import sync_playwright
 import config
 
@@ -65,7 +67,7 @@ def scrape_stock(page):
     # 상품 목록 구간이 뜰 때까지 대기 + 스크롤
     page.wait_for_selector("li[data-bigfoot-component='vendor_item']", timeout=30000)
     page.evaluate("window.scrollBy(0, 800)")
-    page.wait_for_timeout(500)
+    _wait_rows_settled(page)
 
     # 페이지네이션을 끝까지 돌며 수집. (id,option) 기준 중복 제거.
     collected = {}
@@ -96,7 +98,7 @@ def scrape_stock(page):
         if not nxt or _is_disabled(nxt):
             break
         nxt.click()
-        page.wait_for_timeout(900)
+        _wait_rows_settled(page, prev_first_id=first_id_this_page)
 
     return list(collected.values())
 
@@ -112,3 +114,36 @@ def _is_disabled(el):
     cls = (el.get_attribute("class") or "")
     aria = (el.get_attribute("aria-disabled") or "")
     return ("disabled" in cls) or (aria == "true") or (el.get_attribute("disabled") is not None)
+
+
+def _first_pid(rows):
+    if not rows:
+        return None
+    return "".join(ch for ch in rows[0].query_selector("span.item-viid").inner_text() if ch.isdigit())
+
+
+def _wait_rows_settled(page, prev_first_id=None, timeout_ms=8000, settle_ms=400, poll_ms=150):
+    """상품 목록이 다 그려질 때까지 대기.
+    고정 시간만 기다리면 렌더링이 안 끝난 상태(행 일부만 그려진 상태)에서
+    읽어가는 일이 있어서, '페이지 전환 확인 + 행 개수가 더 안 변함'을 직접 확인함.
+    prev_first_id 가 있으면(= 다음 페이지 클릭 직후) 첫 행이 실제로 바뀔 때까지 먼저 기다림.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+
+    if prev_first_id is not None:
+        while time.monotonic() < deadline:
+            rows = page.query_selector_all("li[data-bigfoot-component='vendor_item']")
+            if rows and _first_pid(rows) != prev_first_id:
+                break
+            page.wait_for_timeout(poll_ms)
+
+    last_count = -1
+    stable_since = time.monotonic()
+    while time.monotonic() < deadline:
+        count = len(page.query_selector_all("li[data-bigfoot-component='vendor_item']"))
+        if count != last_count:
+            last_count = count
+            stable_since = time.monotonic()
+        elif (time.monotonic() - stable_since) * 1000 >= settle_ms:
+            return
+        page.wait_for_timeout(poll_ms)
