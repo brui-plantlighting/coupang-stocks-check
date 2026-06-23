@@ -154,20 +154,6 @@ if not prod_df.empty:
                 showlegend=True,
             ))
 
-    # 입고 예정일 점선
-    if not plan_df.empty:
-        prod_plan = plan_df[plan_df["상품ID"] == str(selected_id)]
-        for _, row in prod_plan.iterrows():
-            if pd.isna(row["입고예정일"]):
-                continue
-            label = f"입고 예정 {row['입고예정일'].strftime('%m/%d')} ({row['옵션'] or '전체'} {row['입고수량']}개)"
-            fig.add_vline(
-                x=row["입고예정일"].timestamp() * 1000,
-                line_dash="dash", line_color="orange",
-                annotation_text=label,
-                annotation_position="top left",
-            )
-
     fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션")
     st.plotly_chart(fig, use_container_width=True)
 
