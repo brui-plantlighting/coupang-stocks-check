@@ -162,13 +162,53 @@ with st.expander("입고 예정 목록", expanded=True):
         if prod_plan.empty:
             st.caption("이 상품의 입고 예정이 없습니다.")
         else:
-            prod_plan["입고예정일"] = prod_plan["입고예정일"].dt.strftime("%Y-%m-%d")
-            st.dataframe(
-                prod_plan[["입고예정일", "옵션", "입고수량", "메모", "입력시각"]],
-                use_container_width=True,
+            edit_df = prod_plan[["입력시각", "입고예정일", "옵션", "입고수량", "메모"]].copy()
+            edit_df["입고예정일"] = edit_df["입고예정일"].dt.date
+
+            edited = st.data_editor(
+                edit_df,
+                column_config={
+                    "입력시각": st.column_config.Column("입력시각", disabled=True),
+                    "옵션":     st.column_config.Column("옵션", disabled=True),
+                    "메모":     st.column_config.Column("메모", disabled=True),
+                    "입고예정일": st.column_config.DateColumn("입고 예정일"),
+                    "입고수량":  st.column_config.NumberColumn("입고 수량", format="%d개", min_value=1),
+                },
                 hide_index=True,
-                column_config={"입고수량": st.column_config.NumberColumn("입고수량", format="%d개")},
+                use_container_width=True,
             )
+
+            if st.button("변경사항 저장", key="save_plan"):
+                changed = []
+                for idx in edit_df.index:
+                    if (edit_df.loc[idx, "입고예정일"] != edited.loc[idx, "입고예정일"] or
+                            int(edit_df.loc[idx, "입고수량"]) != int(edited.loc[idx, "입고수량"])):
+                        changed.append({
+                            "입력시각":  edit_df.loc[idx, "입력시각"],
+                            "입고예정일": str(edited.loc[idx, "입고예정일"]),
+                            "입고수량":  int(edited.loc[idx, "입고수량"]),
+                        })
+
+                if not changed:
+                    st.info("변경사항이 없습니다.")
+                else:
+                    ws = _ws_write(config.TAB_RESTOCK_PLAN, H_PLAN)
+                    all_vals = ws.get_all_values()
+                    headers = all_vals[0]
+                    col_시각 = headers.index("입력시각")
+                    col_날짜 = headers.index("입고예정일") + 1  # gspread는 1-based
+                    col_수량 = headers.index("입고수량") + 1
+
+                    for chg in changed:
+                        for row_i, row in enumerate(all_vals[1:], start=2):
+                            if row[col_시각] == chg["입력시각"]:
+                                ws.update_cell(row_i, col_날짜, chg["입고예정일"])
+                                ws.update_cell(row_i, col_수량, chg["입고수량"])
+                                break
+
+                    load_restock_plan.clear()
+                    st.success(f"{len(changed)}개 항목 수정됨")
+                    st.rerun()
 
 # ── 입고 예정 입력 ────────────────────────────────────────────
 with st.expander("입고 예정 입력"):
