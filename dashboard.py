@@ -93,6 +93,9 @@ df["수집시각"] = pd.to_datetime(df["수집시각"], errors="coerce")
 df["재고량"] = pd.to_numeric(df["재고량"], errors="coerce").fillna(0).astype(int)
 df["상품ID"] = df["상품ID"].astype(str)
 
+# ── 현재 재고 테이블 ──────────────────────────────────────────
+st.subheader("현재 재고")
+
 latest = (
     df.sort_values("수집시각")
     .groupby(["상품ID", "옵션"], as_index=False)
@@ -100,24 +103,6 @@ latest = (
     .sort_values(["상품명", "옵션"])
     .reset_index(drop=True)
 )
-product_names = sorted(latest["상품명"].unique())
-plan_df = load_restock_plan()
-
-# ── 재고 추이 차트 자리 예약 ──────────────────────────────────
-st.subheader("재고 추이")
-chart_placeholder = st.empty()
-
-st.divider()
-
-# ── 상품 선택 ─────────────────────────────────────────────────
-selected = st.selectbox("상품 선택", product_names)
-
-selected_id = latest[latest["상품명"] == selected]["상품ID"].iloc[0]
-prod_df = df[df["상품명"] == selected].sort_values("수집시각").reset_index(drop=True)
-
-# ── 현재 재고 테이블 ──────────────────────────────────────────
-st.subheader("현재 재고")
-
 latest_display = latest[["상품명", "옵션", "재고량", "수집시각"]].copy()
 latest_display["수집시각"] = latest_display["수집시각"].dt.strftime("%Y-%m-%d %H:%M")
 
@@ -130,6 +115,43 @@ st.dataframe(
 st.caption(f"마지막 수집: {df['수집시각'].max().strftime('%Y-%m-%d %H:%M')}")
 
 st.divider()
+
+# ── 상품 선택 ─────────────────────────────────────────────────
+product_names = sorted(latest["상품명"].unique())
+selected = st.selectbox("상품 선택", product_names)
+
+selected_id = latest[latest["상품명"] == selected]["상품ID"].iloc[0]
+prod_df = df[df["상품명"] == selected].sort_values("수집시각").reset_index(drop=True)
+plan_df = load_restock_plan()
+
+# ── 재고 추이 차트 ────────────────────────────────────────────
+st.subheader(f"재고 추이 — {selected}")
+
+if not prod_df.empty:
+    options = prod_df["옵션"].unique()
+    fig = go.Figure()
+
+    for opt in options:
+        opt_df = prod_df[prod_df["옵션"] == opt].copy()
+        opt_df["재고증가"] = opt_df["재고량"].diff() > 0
+
+        fig.add_trace(go.Scatter(
+            x=opt_df["수집시각"], y=opt_df["재고량"],
+            mode="lines+markers", name=opt if opt else "기본",
+            line=dict(width=2),
+        ))
+
+        restock_pts = opt_df[opt_df["재고증가"]]
+        if not restock_pts.empty:
+            fig.add_trace(go.Scatter(
+                x=restock_pts["수집시각"], y=restock_pts["재고량"],
+                mode="markers", name=f"입고 감지 ({opt})" if opt else "입고 감지",
+                marker=dict(symbol="triangle-up", size=14, color="green"),
+                showlegend=True,
+            ))
+
+    fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션")
+    st.plotly_chart(fig, use_container_width=True)
 
 # ── 입고 예정 목록 ────────────────────────────────────────────
 with st.expander("입고 예정 목록", expanded=True):
@@ -224,31 +246,3 @@ else:
         total = filtered["추정판매수량"].sum()
         days = (end_date - start_date).days + 1
         st.metric("기간 합계", f"{total:,}개", help=f"{start_date} ~ {end_date} ({days}일)")
-
-# ── 재고 추이 차트 (플레이스홀더 채우기) ──────────────────────
-with chart_placeholder.container():
-    if not prod_df.empty:
-        options = prod_df["옵션"].unique()
-        fig = go.Figure()
-
-        for opt in options:
-            opt_df = prod_df[prod_df["옵션"] == opt].copy()
-            opt_df["재고증가"] = opt_df["재고량"].diff() > 0
-
-            fig.add_trace(go.Scatter(
-                x=opt_df["수집시각"], y=opt_df["재고량"],
-                mode="lines+markers", name=opt if opt else "기본",
-                line=dict(width=2),
-            ))
-
-            restock_pts = opt_df[opt_df["재고증가"]]
-            if not restock_pts.empty:
-                fig.add_trace(go.Scatter(
-                    x=restock_pts["수집시각"], y=restock_pts["재고량"],
-                    mode="markers", name=f"입고 감지 ({opt})" if opt else "입고 감지",
-                    marker=dict(symbol="triangle-up", size=14, color="green"),
-                    showlegend=True,
-                ))
-
-        fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션")
-        st.plotly_chart(fig, use_container_width=True)
