@@ -44,13 +44,12 @@ def rebuild_sales():
         for i in range(1, len(points)):
             t0, s0, _ = points[i - 1]
             t1, s1, name = points[i]
-            restock = sum(q for (t, q) in rs[(pid, opt)] if t0 < t <= t1)
-            delta = (s0 - s1) + restock          # 이 구간 추정 판매
+            delta = s0 - s1          # 재고 감소 = 판매. 증가 = 입고로 간주해 0 처리.
             d = t1.date().isoformat()
             cell = daily[(d, pid, opt)]
-            cell["sales"] += delta
+            cell["sales"] += max(0, delta)
             cell["name"] = name
-            if delta < 0:                         # 설명 안 되는 재고 증가 → 플래그
+            if delta < 0:            # 재고 증가 구간 (입고 반영된 것으로 추정)
                 cell["flags"] += 1
 
     rows = []

@@ -55,10 +55,11 @@ MAX_PAGES_SAFETY = 100
 
 # --- 구글 시트 ---
 SHEET_ID = "1b7xLBOdbIWcwKh_c6SBt9pHoW-bY7stAHOMMkzHA3hk"
-TAB_STOCK_LOG = "재고로그"
-TAB_RESTOCK   = "입고기록"
-TAB_SALES     = "추정판매"
-TAB_DIAG      = "진단로그"
+TAB_STOCK_LOG    = "재고로그"
+TAB_RESTOCK      = "입고기록"
+TAB_RESTOCK_PLAN = "입고예정"
+TAB_SALES        = "추정판매"
+TAB_DIAG         = "진단로그"
 CRED_FILE = "credentials.json"   # 구글 서비스계정 키 파일 (같은 폴더에 둠)
 
 # --- 크롬 프로필 (로그인 유지) ---

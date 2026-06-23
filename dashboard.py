@@ -1,13 +1,16 @@
 import json
-import streamlit as st
+from datetime import date, timedelta
+
 import gspread
-from google.oauth2.service_account import Credentials
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
+from google.oauth2.service_account import Credentials
 
 import config
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+H_PLAN = ["입력시각", "상품ID", "상품명", "옵션", "입고예정일", "입고수량", "메모"]
 
 
 @st.cache_resource
@@ -16,6 +19,16 @@ def _sheet():
     creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     gc = gspread.authorize(creds)
     return gc.open_by_key(config.SHEET_ID)
+
+
+def _ws(tab, headers):
+    sh = _sheet()
+    try:
+        return sh.worksheet(tab)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=tab, rows=2000, cols=20)
+        ws.append_row(headers, value_input_option="USER_ENTERED")
+        return ws
 
 
 @st.cache_data(ttl=300)
@@ -41,7 +54,19 @@ def load_sales() -> pd.DataFrame:
         return pd.DataFrame()
 
 
-# ── 페이지 설정 ──────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def load_restock_plan() -> pd.DataFrame:
+    try:
+        ws = _ws(config.TAB_RESTOCK_PLAN, H_PLAN)
+        df = pd.DataFrame(ws.get_all_records())
+        if not df.empty:
+            df["입고예정일"] = pd.to_datetime(df["입고예정일"], errors="coerce")
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+# ── 페이지 설정 ───────────────────────────────────────────────
 st.set_page_config(page_title="쿠팡 재고 현황", layout="wide")
 st.title("쿠팡 재고 현황")
 
@@ -54,7 +79,7 @@ if df.empty:
 df["수집시각"] = pd.to_datetime(df["수집시각"], errors="coerce")
 df["재고량"] = pd.to_numeric(df["재고량"], errors="coerce").fillna(0).astype(int)
 
-# ── 현재 재고 테이블 ─────────────────────────────────────────
+# ── 현재 재고 테이블 ──────────────────────────────────────────
 st.subheader("현재 재고")
 
 latest = (
@@ -64,39 +89,98 @@ latest = (
     .sort_values(["상품명", "옵션"])
     .reset_index(drop=True)
 )
-latest["수집시각"] = latest["수집시각"].dt.strftime("%Y-%m-%d %H:%M")
+latest_display = latest.copy()
+latest_display["수집시각"] = latest_display["수집시각"].dt.strftime("%Y-%m-%d %H:%M")
 
 st.dataframe(
-    latest,
+    latest_display,
     use_container_width=True,
     hide_index=True,
-    column_config={
-        "재고량": st.column_config.NumberColumn("재고량", format="%d개"),
-    },
+    column_config={"재고량": st.column_config.NumberColumn("재고량", format="%d개")},
 )
 st.caption(f"마지막 수집: {df['수집시각'].max().strftime('%Y-%m-%d %H:%M')}")
 
 st.divider()
 
-# ── 상품별 재고 추이 ──────────────────────────────────────────
-st.subheader("상품별 재고 추이")
-
+# ── 상품 선택 ─────────────────────────────────────────────────
 product_names = sorted(latest["상품명"].unique())
 selected = st.selectbox("상품 선택", product_names)
 
-prod_df = df[df["상품명"] == selected].sort_values("수집시각")
+selected_id = latest[latest["상품명"] == selected]["상품ID"].iloc[0]
+prod_df = df[df["상품명"] == selected].sort_values("수집시각").reset_index(drop=True)
+
+# ── 재고 추이 차트 ────────────────────────────────────────────
+st.subheader("재고 추이")
+
+plan_df = load_restock_plan()
 
 if not prod_df.empty:
-    fig = px.line(
-        prod_df,
-        x="수집시각",
-        y="재고량",
-        color="옵션",
-        markers=True,
-        title=f"{selected} — 재고 추이",
-    )
-    fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="")
+    options = prod_df["옵션"].unique()
+    fig = go.Figure()
+
+    for opt in options:
+        opt_df = prod_df[prod_df["옵션"] == opt].copy()
+        opt_df["재고증가"] = opt_df["재고량"].diff() > 0
+
+        # 기본 재고 라인
+        fig.add_trace(go.Scatter(
+            x=opt_df["수집시각"], y=opt_df["재고량"],
+            mode="lines+markers", name=opt if opt else "기본",
+            line=dict(width=2),
+        ))
+
+        # 입고 감지 마커 (▲)
+        restock_pts = opt_df[opt_df["재고증가"]]
+        if not restock_pts.empty:
+            fig.add_trace(go.Scatter(
+                x=restock_pts["수집시각"], y=restock_pts["재고량"],
+                mode="markers", name=f"입고 감지 ({opt})" if opt else "입고 감지",
+                marker=dict(symbol="triangle-up", size=14, color="green"),
+                showlegend=True,
+            ))
+
+    # 입고 예정일 점선
+    if not plan_df.empty:
+        prod_plan = plan_df[plan_df["상품ID"] == str(selected_id)]
+        for _, row in prod_plan.iterrows():
+            if pd.isna(row["입고예정일"]):
+                continue
+            label = f"입고 예정 {row['입고예정일'].strftime('%m/%d')} ({row['옵션'] or '전체'} {row['입고수량']}개)"
+            fig.add_vline(
+                x=row["입고예정일"].timestamp() * 1000,
+                line_dash="dash", line_color="orange",
+                annotation_text=label,
+                annotation_position="top left",
+            )
+
+    fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션")
     st.plotly_chart(fig, use_container_width=True)
+
+# ── 입고 예정 입력 ────────────────────────────────────────────
+with st.expander("입고 예정 입력"):
+    with st.form("restock_form", clear_on_submit=True):
+        opts = ["(전체)"] + [o for o in prod_df["옵션"].unique() if o]
+        sel_opt = st.selectbox("옵션", opts)
+        plan_date = st.date_input("입고 예정일", value=date.today() + timedelta(days=7))
+        qty = st.number_input("입고 수량", min_value=1, step=1, value=100)
+        memo = st.text_input("메모 (선택)")
+        submitted = st.form_submit_button("저장")
+
+    if submitted:
+        from datetime import datetime
+        ws = _ws(config.TAB_RESTOCK_PLAN, H_PLAN)
+        ws.append_row([
+            datetime.now().isoformat(timespec="seconds"),
+            selected_id,
+            selected,
+            "" if sel_opt == "(전체)" else sel_opt,
+            plan_date.isoformat(),
+            int(qty),
+            memo,
+        ], value_input_option="USER_ENTERED")
+        load_restock_plan.clear()
+        st.success(f"{plan_date} 입고 예정 {qty}개 저장됨")
+        st.rerun()
 
 st.divider()
 
@@ -134,14 +218,15 @@ else:
             (prod_sales["날짜"].dt.date <= end_date)
         ]
 
-        fig2 = px.bar(
-            filtered,
-            x="날짜",
-            y="추정판매수량",
-            color="옵션",
+        fig2 = go.Figure()
+        for opt in filtered["옵션"].unique():
+            opt_s = filtered[filtered["옵션"] == opt]
+            fig2.add_trace(go.Bar(x=opt_s["날짜"], y=opt_s["추정판매수량"], name=opt if opt else "기본"))
+
+        fig2.update_layout(
+            barmode="stack", yaxis_title="판매량 (개)", xaxis_title="",
             title=f"{selected} — 일별 추정 판매",
         )
-        fig2.update_layout(yaxis_title="판매량 (개)", xaxis_title="")
         st.plotly_chart(fig2, use_container_width=True)
 
         total = filtered["추정판매수량"].sum()
