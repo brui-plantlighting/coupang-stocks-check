@@ -216,22 +216,26 @@ with st.expander("입고 예정 입력"):
         qty = st.number_input("입고 수량", min_value=1, step=1, value=100)
         memo = st.text_input("메모 (선택)")
         submitted = st.form_submit_button("저장")
+        if submitted:
+            # 폼이 clear되기 전에 값을 세션 스테이트에 캡처
+            st.session_state["_pending_plan"] = {
+                "date": plan_date, "qty": int(qty), "memo": memo,
+                "id": str(selected_id), "name": selected,
+            }
 
-    if submitted:
-        from datetime import datetime
-        ws = _ws_write(config.TAB_RESTOCK_PLAN, H_PLAN)
-        ws.append_row([
-            datetime.now().isoformat(timespec="seconds"),
-            str(selected_id),
-            selected,
-            "",
-            plan_date.isoformat(),
-            int(qty),
-            memo,
-        ], value_input_option="USER_ENTERED")
-        load_restock_plan.clear()
-        st.success(f"{plan_date} 입고 예정 {qty}개 저장됨")
-        st.rerun()
+# 저장은 폼 밖에서 — 캡처된 값 사용
+if "_pending_plan" in st.session_state:
+    from datetime import datetime
+    p = st.session_state.pop("_pending_plan")
+    ws = _ws_write(config.TAB_RESTOCK_PLAN, H_PLAN)
+    ws.append_row([
+        datetime.now().isoformat(timespec="seconds"),
+        p["id"], p["name"], "",
+        p["date"].isoformat(), p["qty"], p["memo"],
+    ], value_input_option="USER_ENTERED")
+    load_restock_plan.clear()
+    st.success(f"{p['date']} 입고 예정 {p['qty']}개 저장됨")
+    st.rerun()
 
 st.divider()
 
