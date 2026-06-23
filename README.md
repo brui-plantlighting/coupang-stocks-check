@@ -31,6 +31,10 @@
 - 입고기록 없는데 재고가 늘면(반품·취소·미기록 입고) 값이 음수가 됨 → 0으로 숨기지 않고
   **음수 그대로 합산 + '플래그수'로 표시**해서 직접 확인 가능.
 
+## 대시보드
+
+Streamlit Community Cloud 에 배포됨: https://coupang-stocks-check-i5vf2wgym4kjlhueqn6fdt.streamlit.app/
+
 ## 갱신 주기 먼저 확인하기 (진단 모드)
 
 쿠팡 재고 숫자가 진짜 10분마다 바뀌는지, 아니면 한 시간에 한 번만 갱신되는지 모름.

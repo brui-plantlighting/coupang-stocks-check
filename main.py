@@ -18,6 +18,12 @@ def _now():
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _is_connection_lost(exc) -> bool:
+    """크롬 탭/창/프로세스가 닫혀서 CDP 연결이 끊긴 경우인지 판별."""
+    msg = str(exc)
+    return "has been closed" in msg or "Connection closed" in msg
+
+
 def run_cycle(page, diagnostic):
     items = scraper.scrape_stock(page)
     if items is None:
@@ -47,21 +53,33 @@ def main():
     mode = "진단 모드(갱신주기 탐지)" if diagnostic else "수집 모드"
     print(f"=== 쿠팡 재고 추적기 시작 | {mode} | {interval}초 간격 ===")
 
-    with scraper.launch() as page:
-        scraper.ensure_login(page)   # 처음 한 번만 사람이 직접 로그인
-        counter = 0
-        while True:
-            try:
-                run_cycle(page, diagnostic)
-                if not diagnostic:
-                    counter += 1
-                    if counter % config.RECALC_EVERY_N_CYCLES == 0:
-                        n = calc.rebuild_sales()
-                        print(f"[{_now()}] 추정판매 {n}행 갱신")
-            except Exception:
-                print(f"[{_now()}] 오류 발생 (루프는 계속):")
-                traceback.print_exc()
-            time.sleep(interval)
+    pw, browser, page = scraper.connect()
+    scraper.ensure_login(page)   # 처음 한 번만 사람이 직접 로그인
+    counter = 0
+    while True:
+        try:
+            run_cycle(page, diagnostic)
+            if not diagnostic:
+                counter += 1
+                if counter % config.RECALC_EVERY_N_CYCLES == 0:
+                    n = calc.rebuild_sales()
+                    print(f"[{_now()}] 추정판매 {n}행 갱신")
+        except Exception as e:
+            print(f"[{_now()}] 오류 발생 (루프는 계속):")
+            traceback.print_exc()
+            if _is_connection_lost(e):
+                print(f"[{_now()}] 크롬 연결 끊김 — 재연결 시도")
+                scraper.disconnect(pw, browser)
+                while True:
+                    try:
+                        pw, browser, page = scraper.connect()
+                        scraper.ensure_login(page)
+                        print(f"[{_now()}] 재연결 성공, 수집 재개")
+                        break
+                    except Exception:
+                        print(f"[{_now()}] 재연결 실패 — {interval}초 후 재시도 (크롬이 꺼져있다면 start_chrome.bat 으로 다시 켜주세요)")
+                        time.sleep(interval)
+        time.sleep(interval)
 
 
 if __name__ == "__main__":

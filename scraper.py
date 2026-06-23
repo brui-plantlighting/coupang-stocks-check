@@ -6,24 +6,34 @@
 # goalType=SALES URL 로 바로 들어가므로 '매출성장/다음' 같은 마법사 진행 버튼은 누를 일이 없음.
 # 누르는 건 오직 '상품 목록 페이지네이션(1 2 3 ... 다음)' 뿐 → 광고가 만들어질 일 없음.
 
-from contextlib import contextmanager
 from playwright.sync_api import sync_playwright
 import config
 
 CDP_URL = "http://127.0.0.1:9222"
 
 
-@contextmanager
-def launch():
-    """start_chrome.bat 으로 이미 띄운 크롬(포트 9222)에 CDP 로 붙음."""
-    with sync_playwright() as pw:
-        browser = pw.chromium.connect_over_cdp(CDP_URL)
-        ctx = browser.contexts[0]
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        try:
-            yield page
-        finally:
-            browser.close()  # CDP 연결만 끊힘. 크롬 자체는 계속 살아있음.
+def connect():
+    """start_chrome.bat 으로 이미 띄운 크롬(포트 9222)에 CDP 로 붙음.
+    반환: (playwright, browser, page). 크롬이 닫혔다 다시 켜진 경우에도
+    main 루프가 이 함수를 다시 불러 재연결할 수 있도록 분리해둠.
+    """
+    pw = sync_playwright().start()
+    browser = pw.chromium.connect_over_cdp(CDP_URL)
+    ctx = browser.contexts[0]
+    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+    return pw, browser, page
+
+
+def disconnect(pw, browser):
+    """CDP 연결만 끊음. 크롬 자체는 계속 살아있음."""
+    try:
+        browser.close()
+    except Exception:
+        pass
+    try:
+        pw.stop()
+    except Exception:
+        pass
 
 
 def is_logged_in(page) -> bool:

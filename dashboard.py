@@ -150,7 +150,10 @@ if not prod_df.empty:
                 showlegend=True,
             ))
 
-    fig.update_layout(yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션")
+    fig.update_layout(
+        yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션",
+        yaxis=dict(rangemode="tozero"),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 # ── 입고 예정 목록 ────────────────────────────────────────────
