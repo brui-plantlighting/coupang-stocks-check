@@ -128,8 +128,8 @@ plan_df = load_restock_plan()
 
 st.title(selected)
 
-tab_trend, tab_restock, tab_sales, tab_raw = st.tabs(
-    ["재고 추이", "입고 관리", "추정 판매량", "전체 재고"]
+tab_trend, tab_daily, tab_restock, tab_sales, tab_raw = st.tabs(
+    ["재고 추이", "일별 마감재고", "입고 관리", "추정 판매량", "전체 재고"]
 )
 
 # ── 재고 추이 ─────────────────────────────────────────────────
@@ -187,6 +187,63 @@ with tab_trend:
             margin=dict(t=40, l=10, r=10, b=10),
         )
         st.plotly_chart(fig, use_container_width=True)
+
+# ── 일별 마감재고 ─────────────────────────────────────────────
+with tab_daily:
+    if prod_df.empty:
+        st.caption("표시할 데이터가 없습니다.")
+    else:
+        daily = (
+            prod_df.assign(날짜=prod_df["수집시각"].dt.date)
+            .sort_values("수집시각")
+            .groupby(["날짜", "옵션"], as_index=False)
+            .last()[["날짜", "옵션", "재고량"]]
+        )
+
+        date_min = daily["날짜"].min()
+        date_max = daily["날짜"].max()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            daily_start = st.date_input("시작일", value=date_min, min_value=date_min, max_value=date_max, key="daily_start")
+        with col2:
+            daily_end = st.date_input("종료일", value=date_max, min_value=date_min, max_value=date_max, key="daily_end")
+
+        if daily_start > daily_end:
+            st.error("시작일이 종료일보다 늦을 수 없어요.")
+        else:
+            daily_f = daily[(daily["날짜"] >= daily_start) & (daily["날짜"] <= daily_end)]
+
+            fig3 = go.Figure()
+            for opt in daily_f["옵션"].unique():
+                opt_d = daily_f[daily_f["옵션"] == opt]
+                fig3.add_trace(go.Scatter(
+                    x=opt_d["날짜"], y=opt_d["재고량"],
+                    mode="lines+markers", name=opt if opt else "기본",
+                ))
+
+            fig3.update_layout(
+                template=CHART_TEMPLATE,
+                yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션",
+                yaxis=dict(rangemode="tozero"), hovermode="x unified",
+                legend=_legend_top(), margin=dict(t=40, l=10, r=10, b=10),
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+
+            pivot = (
+                daily_f.pivot(index="날짜", columns="옵션", values="재고량")
+                .sort_index(ascending=False)
+            )
+            pivot.index = pivot.index.map(lambda d: d.strftime("%Y-%m-%d"))
+            pivot.columns = [c if c else "기본" for c in pivot.columns]
+
+            st.dataframe(
+                pivot,
+                use_container_width=True,
+                column_config={
+                    c: st.column_config.NumberColumn(c, format="%d개") for c in pivot.columns
+                },
+            )
 
 # ── 입고 관리 ─────────────────────────────────────────────────
 with tab_restock:
