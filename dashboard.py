@@ -126,6 +126,13 @@ plan_df = load_restock_plan()
 # ── 재고 추이 차트 ────────────────────────────────────────────
 st.subheader(f"재고 추이 — {selected}")
 
+selected_latest = latest[latest["상품명"] == selected].sort_values("옵션")
+if not selected_latest.empty:
+    cols = st.columns(len(selected_latest))
+    for col, (_, row) in zip(cols, selected_latest.iterrows()):
+        col.metric(row["옵션"] if row["옵션"] else "재고", f"{int(row['재고량'])}개")
+    st.caption(f"기준 시각: {selected_latest['수집시각'].max().strftime('%Y-%m-%d %H:%M')}")
+
 if not prod_df.empty:
     date_min = prod_df["수집시각"].min().date()
     date_max = prod_df["수집시각"].max().date()
