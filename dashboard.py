@@ -130,7 +130,8 @@ selected_latest = latest[latest["상품명"] == selected].sort_values("옵션")
 if not selected_latest.empty:
     cols = st.columns(len(selected_latest))
     for col, (_, row) in zip(cols, selected_latest.iterrows()):
-        col.metric(row["옵션"] if row["옵션"] else "재고", f"{int(row['재고량'])}개")
+        with col.container(border=True):
+            st.metric(row["옵션"] if row["옵션"] else "재고", f"{int(row['재고량'])}개")
     st.caption(f"기준 시각: {selected_latest['수집시각'].max().strftime('%Y-%m-%d %H:%M')}")
 
 if not prod_df.empty:
