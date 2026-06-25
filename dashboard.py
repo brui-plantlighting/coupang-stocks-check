@@ -80,6 +80,7 @@ def load_restock_plan() -> pd.DataFrame:
 
 
 CHART_TEMPLATE = "plotly_white"
+EXCLUDED_OPTION = "아이템 위너 : 미선정"
 
 
 def _legend_top():
@@ -98,6 +99,7 @@ if df.empty:
 df["수집시각"] = pd.to_datetime(df["수집시각"], errors="coerce")
 df["재고량"] = pd.to_numeric(df["재고량"], errors="coerce").fillna(0).astype(int)
 df["상품ID"] = df["상품ID"].astype(str)
+df = df[df["옵션"] != EXCLUDED_OPTION]
 
 latest = (
     df.sort_values("수집시각")
@@ -342,6 +344,7 @@ with tab_sales:
     else:
         sales_df["날짜"] = pd.to_datetime(sales_df["날짜"], errors="coerce")
         sales_df["추정판매수량"] = pd.to_numeric(sales_df["추정판매수량"], errors="coerce").fillna(0).astype(int)
+        sales_df = sales_df[sales_df["옵션"] != EXCLUDED_OPTION]
 
         prod_sales = sales_df[sales_df["상품명"] == selected].sort_values("날짜")
 

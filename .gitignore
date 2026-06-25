@@ -1,5 +1,7 @@
 credentials.json
+coupang_credentials.json
 chrome_profile/
+login_events.log
 __pycache__/
 *.pyc
 .streamlit/secrets.toml

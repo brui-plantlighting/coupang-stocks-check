@@ -6,9 +6,10 @@
 # goalType=SALES URL 로 바로 들어가므로 '매출성장/다음' 같은 마법사 진행 버튼은 누를 일이 없음.
 # 누르는 건 오직 '상품 목록 페이지네이션(1 2 3 ... 다음)' 뿐 → 광고가 만들어질 일 없음.
 
+import json
 import time
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import config
 
 CDP_URL = "http://127.0.0.1:9222"
@@ -43,10 +44,75 @@ def is_logged_in(page) -> bool:
     return "advertising.coupang.com" in page.url and "/user/login" not in page.url
 
 
+def _load_coupang_credentials():
+    """coupang_credentials.json 에서 (id, pw) 읽음. 파일이 없거나 채워지지 않았으면 None."""
+    try:
+        with open(config.COUPANG_CRED_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    cid, pw = data.get("id"), data.get("pw")
+    if not cid or not pw or "여기에" in cid:
+        return None
+    return cid, pw
+
+
+def auto_login(page) -> bool:
+    """저장된 id/pw로 쿠팡 로그인 폼을 채워서 제출.
+    seller-type/market 선택 다이얼로그를 거쳐야 로그인 폼이 나오는데, 이 다이얼로그가
+    안 뜨는 계정/세션도 있어서 각 단계는 있으면 누르고 없으면 그냥 건너뜀.
+    CAPTCHA 등 자동화로 못 뚫는 단계가 있으면 여기서 막혀 False를 반환하고,
+    ensure_login 이 사람 개입(input())으로 넘어감.
+    """
+    creds = _load_coupang_credentials()
+    if creds is None:
+        return False
+    cid, pw = creds
+
+    try:
+        login_btn = page.query_selector("button.ant-btn.ant-btn-primary")
+        if login_btn:
+            login_btn.click()
+            page.wait_for_timeout(1500)
+
+        radio = page.query_selector("input[type='radio']")
+        if radio:
+            radio.click()
+            page.wait_for_timeout(800)
+            for b in page.query_selector_all("button"):
+                if "Ads Center" in b.inner_text() or "광고센터" in b.inner_text():
+                    b.click()
+                    break
+            page.wait_for_timeout(1500)
+
+        page.wait_for_selector("input[name='username']", timeout=15000)
+        page.fill("input[name='username']", cid)
+        page.fill("input[name='password']", pw)
+        page.click("button[type='submit'].btn-primary")
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(2000)
+    except PlaywrightTimeoutError:
+        return False
+
+    return is_logged_in(page)
+
+
 def ensure_login(page):
-    """CDP 모드: 크롬이 이미 로그인돼 있어야 함. 아니면 수동 로그인 요청."""
+    """로그인이 풀려 있으면 저장된 id/pw로 자동 재로그인을 먼저 시도.
+    자격증명이 없거나(coupang_credentials.json 미입력) 자동 로그인이 끝내 실패하면
+    (CAPTCHA 등) 기존처럼 사람이 직접 로그인하도록 기다림.
+    """
     page.goto(config.ADS_CENTER_URL)
     page.wait_for_load_state("domcontentloaded")
+
+    for _ in range(config.COUPANG_LOGIN_MAX_RETRY):
+        if is_logged_in(page):
+            break
+        if not auto_login(page):
+            break
+        page.goto(config.ADS_CENTER_URL)
+        page.wait_for_load_state("domcontentloaded")
+
     while not is_logged_in(page):
         input("▶ 크롬 창에서 로그인 완료 후 엔터: ")
         page.wait_for_load_state("domcontentloaded")
@@ -60,12 +126,20 @@ def scrape_stock(page):
     반환: [{"id": str, "option": str, "price": int, "stock": int}, ...]
     """
     page.goto(config.ADS_CENTER_URL)
+    page.wait_for_load_state("domcontentloaded")
 
     if not is_logged_in(page):
         return None
 
     # 상품 목록 구간이 뜰 때까지 대기 + 스크롤
-    page.wait_for_selector("li[data-bigfoot-component='vendor_item']", timeout=30000)
+    # goto 시점엔 로그인된 것처럼 보였다가, 그 직후 JS 리다이렉트로 로그인 화면으로
+    # 넘어가는 경우가 있어서(타이밍 차이) 타임아웃이 나면 로그인 상태를 다시 확인함.
+    try:
+        page.wait_for_selector("li[data-bigfoot-component='vendor_item']", timeout=30000)
+    except PlaywrightTimeoutError:
+        if not is_logged_in(page):
+            return None
+        raise
     page.evaluate("window.scrollBy(0, 800)")
     _wait_rows_settled(page)
 

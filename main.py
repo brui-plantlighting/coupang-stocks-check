@@ -13,9 +13,25 @@ import scraper
 import sheets
 import calc
 
+LOGIN_EVENT_LOG = "login_events.log"
+
+# 로그인 풀림이 실제로 얼마나 자주 일어나는지 측정하는 동안 쓰는 상태.
+# auto_login 이 쿠팡 WAF(Akamai)에 막혀서 거의 항상 실패하므로, 여기서는
+# 자동 재로그인을 시도하지 않고 풀림/복구 시각만 기록함 (사람이 크롬 창에서
+# 직접 로그인해주면 다음 사이클에 자동으로 복구 감지됨).
+_login_ok = True
+_dropped_at = None
+
 
 def _now():
     return datetime.now().isoformat(timespec="seconds")
+
+
+def _log_login_event(text):
+    line = f"[{_now()}] {text}"
+    print(line)
+    with open(LOGIN_EVENT_LOG, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
 
 
 def _is_connection_lost(exc) -> bool:
@@ -25,10 +41,21 @@ def _is_connection_lost(exc) -> bool:
 
 
 def run_cycle(page, diagnostic):
+    global _login_ok, _dropped_at
+
     items = scraper.scrape_stock(page)
     if items is None:
-        print(f"[{_now()}] ⚠️ 로그인 풀림 — 그 컴퓨터의 크롬 창에서 다시 로그인하면 다음 사이클에 자동 복구됨")
+        if _login_ok:
+            _login_ok = False
+            _dropped_at = datetime.now()
+            _log_login_event("⚠️ 로그인 풀림 감지 — 크롬 창에서 다시 로그인하면 자동으로 복구됨")
         return
+
+    if not _login_ok:
+        down_for = datetime.now() - _dropped_at
+        _log_login_event(f"✅ 로그인 복구됨 (풀린 채로 {down_for} 경과)")
+        _login_ok = True
+        _dropped_at = None
 
     # 화이트리스트 필터 (config.PRODUCTS 에 있는 상품만) + 표시 이름으로 치환
     rows = []

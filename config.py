@@ -62,6 +62,11 @@ TAB_SALES        = "추정판매"
 TAB_DIAG         = "진단로그"
 CRED_FILE = "credentials.json"   # 구글 서비스계정 키 파일 (같은 폴더에 둠)
 
+# --- 쿠팡 로그인 (자동 재로그인용) ---
+# {"id": "...", "pw": "..."} 형태. git에 올리지 말 것 (.gitignore 에 넣어둠).
+COUPANG_CRED_FILE = "coupang_credentials.json"
+COUPANG_LOGIN_MAX_RETRY = 3
+
 # --- 크롬 프로필 (로그인 유지) ---
 # 이 폴더에 로그인 세션이 저장됨. 한 번 로그인하면 계속 유지.
 # 절대 git 에 올리지 말 것 (.gitignore 에 넣어둠).

@@ -85,7 +85,9 @@ Streamlit Community Cloud 에 배포됨: https://coupang-stocks-check-i5vf2wgym4
 ```
 python main.py
 ```
-처음 한 번 크롬 창에서 직접 로그인하고 엔터. 이후엔 계속 상주하며 수집.
+처음 한 번 크롬 창에서 직접 로그인하고 엔터. 이후 로그인이 풀리면
+`coupang_credentials.json` 에 저장된 id/pw로 자동 재로그인 시도 → 그래도 실패하면
+(CAPTCHA 등) 그제서야 사람이 직접 로그인하도록 멈추고 기다림.
 
 ---
 
@@ -95,7 +97,8 @@ python main.py
 '매출성장/다음' 같은 **마법사 진행 버튼은 누를 일이 아예 없음** (= 광고가 만들어질 일 없음).
 누르는 건 오직 안전한 **상품 목록 페이지네이션(1 2 3 ... 다음)** 뿐.
 
-`credentials.json` 과 `chrome_profile/` 는 로그인·키 정보라 **절대 깃에 올리지 말 것**
+`credentials.json`(구글 서비스계정 키), `coupang_credentials.json`(쿠팡 로그인 id/pw),
+`chrome_profile/` 는 모두 로그인·키 정보라 **절대 깃에 올리지 말 것**
 (`.gitignore` 에 이미 넣어둠).
 
 ## 파일 구조
