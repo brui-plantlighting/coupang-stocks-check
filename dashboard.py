@@ -160,33 +160,29 @@ with tab_trend:
     if period_df.empty:
         st.caption("표시할 데이터가 없습니다.")
     else:
+        # 선정/미선정은 재고 유무의 상태 표시일 뿐 — 하나의 연속 시계열로 처리
+        series = period_df.sort_values("수집시각").copy()
+        series["재고증가"] = series["재고량"].diff() > 0
+
         fig = go.Figure()
-        chart_df = period_df[period_df["옵션"] != EXCLUDED_OPTION]
-        if chart_df.empty:
-            chart_df = period_df  # 미선정만 있는 상품이면 그대로 표시
+        fig.add_trace(go.Scatter(
+            x=series["수집시각"], y=series["재고량"],
+            mode="lines+markers", name="재고량",
+            line=dict(width=2),
+        ))
 
-        for opt in chart_df["옵션"].unique():
-            opt_df = chart_df[chart_df["옵션"] == opt].copy()
-            opt_df["재고증가"] = opt_df["재고량"].diff() > 0
-
+        restock_pts = series[series["재고증가"]]
+        if not restock_pts.empty:
             fig.add_trace(go.Scatter(
-                x=opt_df["수집시각"], y=opt_df["재고량"],
-                mode="lines+markers", name=opt if opt else "기본",
-                line=dict(width=2),
+                x=restock_pts["수집시각"], y=restock_pts["재고량"],
+                mode="markers", name="입고 감지",
+                marker=dict(symbol="triangle-up", size=14, color="green"),
+                showlegend=True,
             ))
-
-            restock_pts = opt_df[opt_df["재고증가"]]
-            if not restock_pts.empty:
-                fig.add_trace(go.Scatter(
-                    x=restock_pts["수집시각"], y=restock_pts["재고량"],
-                    mode="markers", name=f"입고 감지 ({opt})" if opt else "입고 감지",
-                    marker=dict(symbol="triangle-up", size=14, color="green"),
-                    showlegend=True,
-                ))
 
         fig.update_layout(
             template=CHART_TEMPLATE,
-            yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션",
+            yaxis_title="재고량 (개)", xaxis_title="",
             yaxis=dict(rangemode="tozero"),
             hovermode="x unified",
             legend=_legend_top(),
@@ -202,8 +198,8 @@ with tab_daily:
         daily = (
             prod_df.assign(날짜=prod_df["수집시각"].dt.date)
             .sort_values("수집시각")
-            .groupby(["날짜", "옵션"], as_index=False)
-            .last()[["날짜", "옵션", "재고량"]]
+            .groupby("날짜", as_index=False)
+            .last()[["날짜", "재고량"]]
         )
 
         date_min = daily["날짜"].min()
@@ -219,38 +215,32 @@ with tab_daily:
             st.error("시작일이 종료일보다 늦을 수 없어요.")
         else:
             daily_f = daily[(daily["날짜"] >= daily_start) & (daily["날짜"] <= daily_end)]
-            daily_chart = daily_f[daily_f["옵션"] != EXCLUDED_OPTION]
-            if daily_chart.empty:
-                daily_chart = daily_f
 
             fig3 = go.Figure()
-            for opt in daily_chart["옵션"].unique():
-                opt_d = daily_chart[daily_chart["옵션"] == opt]
-                fig3.add_trace(go.Scatter(
-                    x=opt_d["날짜"], y=opt_d["재고량"],
-                    mode="lines+markers", name=opt if opt else "기본",
-                ))
+            fig3.add_trace(go.Scatter(
+                x=daily_f["날짜"], y=daily_f["재고량"],
+                mode="lines+markers", name="재고량",
+            ))
 
             fig3.update_layout(
                 template=CHART_TEMPLATE,
-                yaxis_title="재고량 (개)", xaxis_title="", legend_title="옵션",
+                yaxis_title="재고량 (개)", xaxis_title="",
                 yaxis=dict(rangemode="tozero"), hovermode="x unified",
                 legend=_legend_top(), margin=dict(t=40, l=10, r=10, b=10),
             )
             st.plotly_chart(fig3, use_container_width=True)
 
             pivot = (
-                daily_f.pivot(index="날짜", columns="옵션", values="재고량")
+                daily_f.set_index("날짜")[["재고량"]]
                 .sort_index(ascending=False)
             )
             pivot.index = pivot.index.map(lambda d: d.strftime("%Y-%m-%d"))
-            pivot.columns = [c if c else "기본" for c in pivot.columns]
 
             st.dataframe(
                 pivot,
                 use_container_width=True,
                 column_config={
-                    c: st.column_config.NumberColumn(c, format="%d개") for c in pivot.columns
+                    "재고량": st.column_config.NumberColumn("재고량", format="%d개")
                 },
             )
 
