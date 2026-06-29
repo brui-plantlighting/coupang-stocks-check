@@ -99,13 +99,14 @@ if df.empty:
 df["수집시각"] = pd.to_datetime(df["수집시각"], errors="coerce")
 df["재고량"] = pd.to_numeric(df["재고량"], errors="coerce").fillna(0).astype(int)
 df["상품ID"] = df["상품ID"].astype(str)
-df = df[df["옵션"] != EXCLUDED_OPTION]
 
+# 상품ID별 가장 최근 1행만 남김.
+# 선정→미선정 전환 등 옵션이 바뀌어도 현재 상태를 정확히 보여줌.
 latest = (
     df.sort_values("수집시각")
-    .groupby(["상품ID", "옵션"], as_index=False)
+    .groupby("상품ID", as_index=False)
     .last()[["상품ID", "상품명", "옵션", "재고량", "수집시각"]]
-    .sort_values(["상품명", "옵션"])
+    .sort_values("상품명")
     .reset_index(drop=True)
 )
 
@@ -160,9 +161,12 @@ with tab_trend:
         st.caption("표시할 데이터가 없습니다.")
     else:
         fig = go.Figure()
+        chart_df = period_df[period_df["옵션"] != EXCLUDED_OPTION]
+        if chart_df.empty:
+            chart_df = period_df  # 미선정만 있는 상품이면 그대로 표시
 
-        for opt in period_df["옵션"].unique():
-            opt_df = period_df[period_df["옵션"] == opt].copy()
+        for opt in chart_df["옵션"].unique():
+            opt_df = chart_df[chart_df["옵션"] == opt].copy()
             opt_df["재고증가"] = opt_df["재고량"].diff() > 0
 
             fig.add_trace(go.Scatter(
@@ -215,10 +219,13 @@ with tab_daily:
             st.error("시작일이 종료일보다 늦을 수 없어요.")
         else:
             daily_f = daily[(daily["날짜"] >= daily_start) & (daily["날짜"] <= daily_end)]
+            daily_chart = daily_f[daily_f["옵션"] != EXCLUDED_OPTION]
+            if daily_chart.empty:
+                daily_chart = daily_f
 
             fig3 = go.Figure()
-            for opt in daily_f["옵션"].unique():
-                opt_d = daily_f[daily_f["옵션"] == opt]
+            for opt in daily_chart["옵션"].unique():
+                opt_d = daily_chart[daily_chart["옵션"] == opt]
                 fig3.add_trace(go.Scatter(
                     x=opt_d["날짜"], y=opt_d["재고량"],
                     mode="lines+markers", name=opt if opt else "기본",

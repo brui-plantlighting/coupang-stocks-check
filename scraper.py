@@ -7,6 +7,7 @@
 # 누르는 건 오직 '상품 목록 페이지네이션(1 2 3 ... 다음)' 뿐 → 광고가 만들어질 일 없음.
 
 import json
+import random
 import time
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
@@ -58,7 +59,7 @@ def _load_coupang_credentials():
 
 
 def auto_login(page) -> bool:
-    """저장된 id/pw로 쿠팡 로그인 폼을 채워서 제출.
+    """저장된 id/pw로 쿠팡 로그인 폼을 사람처럼 채워서 제출.
     seller-type/market 선택 다이얼로그를 거쳐야 로그인 폼이 나오는데, 이 다이얼로그가
     안 뜨는 계정/세션도 있어서 각 단계는 있으면 누르고 없으면 그냥 건너뜀.
     CAPTCHA 등 자동화로 못 뚫는 단계가 있으면 여기서 막혀 False를 반환하고,
@@ -73,24 +74,38 @@ def auto_login(page) -> bool:
         login_btn = page.query_selector("button.ant-btn.ant-btn-primary")
         if login_btn:
             login_btn.click()
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(random.randint(1200, 2000))
 
         radio = page.query_selector("input[type='radio']")
         if radio:
             radio.click()
-            page.wait_for_timeout(800)
+            page.wait_for_timeout(random.randint(600, 1000))
             for b in page.query_selector_all("button"):
                 if "Ads Center" in b.inner_text() or "광고센터" in b.inner_text():
                     b.click()
                     break
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(random.randint(1200, 2000))
 
         page.wait_for_selector("input[name='username']", timeout=15000)
-        page.fill("input[name='username']", cid)
-        page.fill("input[name='password']", pw)
+
+        page.click("input[name='username']")
+        page.wait_for_timeout(random.randint(300, 700))
+        for ch in cid:
+            page.keyboard.type(ch)
+            page.wait_for_timeout(random.randint(70, 180))
+
+        page.wait_for_timeout(random.randint(400, 900))
+
+        page.click("input[name='password']")
+        page.wait_for_timeout(random.randint(300, 700))
+        for ch in pw:
+            page.keyboard.type(ch)
+            page.wait_for_timeout(random.randint(70, 180))
+
+        page.wait_for_timeout(random.randint(600, 1200))
         page.click("button[type='submit'].btn-primary")
         page.wait_for_load_state("domcontentloaded")
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(2500)
     except PlaywrightTimeoutError:
         return False
 
