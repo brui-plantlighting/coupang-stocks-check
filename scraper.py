@@ -113,9 +113,8 @@ def auto_login(page) -> bool:
 
 
 def ensure_login(page):
-    """로그인이 풀려 있으면 저장된 id/pw로 자동 재로그인을 먼저 시도.
-    자격증명이 없거나(coupang_credentials.json 미입력) 자동 로그인이 끝내 실패하면
-    (CAPTCHA 등) 기존처럼 사람이 직접 로그인하도록 기다림.
+    """로그인 상태 확인 후 필요하면 자동 재로그인 시도.
+    실패해도 input() 로 멈추지 않고 RuntimeError 를 올려서 호출부가 재시도를 결정함.
     """
     page.goto(config.ADS_CENTER_URL)
     page.wait_for_load_state("domcontentloaded")
@@ -128,9 +127,8 @@ def ensure_login(page):
         page.goto(config.ADS_CENTER_URL)
         page.wait_for_load_state("domcontentloaded")
 
-    while not is_logged_in(page):
-        input("▶ 크롬 창에서 로그인 완료 후 엔터: ")
-        page.wait_for_load_state("domcontentloaded")
+    if not is_logged_in(page):
+        raise RuntimeError("자동 재로그인 실패")
     print("로그인 확인됨. 수집 시작.")
 
 

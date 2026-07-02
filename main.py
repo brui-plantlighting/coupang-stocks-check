@@ -14,13 +14,11 @@ import sheets
 import calc
 
 LOGIN_EVENT_LOG = "login_events.log"
+RELOGIN_RETRY_SEC = 600  # 자동 재로그인 실패 시 10분 후 재시도
 
-# 로그인 풀림이 실제로 얼마나 자주 일어나는지 측정하는 동안 쓰는 상태.
-# auto_login 이 쿠팡 WAF(Akamai)에 막혀서 거의 항상 실패하므로, 여기서는
-# 자동 재로그인을 시도하지 않고 풀림/복구 시각만 기록함 (사람이 크롬 창에서
-# 직접 로그인해주면 다음 사이클에 자동으로 복구 감지됨).
 _login_ok = True
 _dropped_at = None
+_last_relogin_attempt = None
 
 
 def _now():
@@ -41,14 +39,27 @@ def _is_connection_lost(exc) -> bool:
 
 
 def run_cycle(page, diagnostic):
-    global _login_ok, _dropped_at
+    global _login_ok, _dropped_at, _last_relogin_attempt
 
     items = scraper.scrape_stock(page)
     if items is None:
         if _login_ok:
             _login_ok = False
             _dropped_at = datetime.now()
-            _log_login_event("⚠️ 로그인 풀림 감지 — 크롬 창에서 다시 로그인하면 자동으로 복구됨")
+            _log_login_event("⚠️ 로그인 풀림 감지 — 자동 재로그인 시도")
+
+        # 10분마다 자동 재로그인 재시도 (계속 실패해도 무한 재시도, 막히지 않음)
+        now = datetime.now()
+        if (_last_relogin_attempt is None or
+                (now - _last_relogin_attempt).total_seconds() >= RELOGIN_RETRY_SEC):
+            _last_relogin_attempt = now
+            if scraper.auto_login(page):
+                _log_login_event("✅ 자동 재로그인 성공")
+                _login_ok = True
+                _dropped_at = None
+                _last_relogin_attempt = None
+            else:
+                _log_login_event(f"❌ 자동 재로그인 실패 — {RELOGIN_RETRY_SEC // 60}분 후 재시도")
         return
 
     if not _login_ok:
@@ -56,6 +67,7 @@ def run_cycle(page, diagnostic):
         _log_login_event(f"✅ 로그인 복구됨 (풀린 채로 {down_for} 경과)")
         _login_ok = True
         _dropped_at = None
+        _last_relogin_attempt = None
 
     # 화이트리스트 필터 (config.PRODUCTS 에 있는 상품만) + 표시 이름으로 치환
     rows = []
@@ -65,7 +77,6 @@ def run_cycle(page, diagnostic):
         display_name = config.PRODUCTS[it["id"]]
         rows.append([_now(), it["id"], display_name, it["option"], it["price"], it["stock"]])
 
-    # 필터가 살아있는지 확인용 로그 (쿠파일럿 때처럼)
     print(f"[{_now()}] 화이트리스트 필터 적용 → {len(rows)}개 옵션 수집 (전체 {len(items)}개 중)")
 
     if diagnostic:
@@ -74,14 +85,25 @@ def run_cycle(page, diagnostic):
         sheets.append_stock_rows(rows)
 
 
+def _connect_with_retry(interval):
+    """Chrome 연결 + 로그인. 둘 다 될 때까지 interval 초마다 재시도."""
+    while True:
+        try:
+            pw, browser, page = scraper.connect()
+            scraper.ensure_login(page)
+            return pw, browser, page
+        except Exception:
+            print(f"[{_now()}] 연결/로그인 실패 — {interval}초 후 재시도")
+            time.sleep(interval)
+
+
 def main():
     diagnostic = config.DIAGNOSTIC_MODE
     interval = config.DIAGNOSTIC_INTERVAL_SEC if diagnostic else config.POLL_INTERVAL_SEC
     mode = "진단 모드(갱신주기 탐지)" if diagnostic else "수집 모드"
     print(f"=== 쿠팡 재고 추적기 시작 | {mode} | {interval}초 간격 ===")
 
-    pw, browser, page = scraper.connect()
-    scraper.ensure_login(page)   # 처음 한 번만 사람이 직접 로그인
+    pw, browser, page = _connect_with_retry(interval)
     counter = 0
     while True:
         try:
@@ -97,15 +119,8 @@ def main():
             if _is_connection_lost(e):
                 print(f"[{_now()}] 크롬 연결 끊김 — 재연결 시도")
                 scraper.disconnect(pw, browser)
-                while True:
-                    try:
-                        pw, browser, page = scraper.connect()
-                        scraper.ensure_login(page)
-                        print(f"[{_now()}] 재연결 성공, 수집 재개")
-                        break
-                    except Exception:
-                        print(f"[{_now()}] 재연결 실패 — {interval}초 후 재시도 (크롬이 꺼져있다면 start_chrome.bat 으로 다시 켜주세요)")
-                        time.sleep(interval)
+                pw, browser, page = _connect_with_retry(interval)
+                print(f"[{_now()}] 재연결 성공, 수집 재개")
         time.sleep(interval)
 
 
